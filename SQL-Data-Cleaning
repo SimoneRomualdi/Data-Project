@@ -1,1 +1,692 @@
 Queste sono le query usate per pulire i dati
+
+SELECT * FROM migrants_bckp;
+
+-- Controllo duplicati attraverso CTE
+
+WITH CTE_Duplicati AS (
+SELECT *,
+ROW_NUMBER() OVER(PARTITION BY "Incident Type", "Incident year", "Reported Month", "Region of Origin", "Region of Incident", "Country of Origin", 
+"Number of Dead", "Minimum Estimated Number of Missing", "Total Number of Dead and Missing", "Number of Survivors", "Number of Females", 
+"Number of Males", "Number of Children", "Cause of Death", "Migration route", "Location of death", "Information Source", "Coordinates", 
+"UNSD Geographical Grouping") AS row_num 
+FROM Migrants)
+SELECT * FROM CTE_Duplicati 
+WHERE row_num > 1;
+
+/* -- Essendoci duplicati creo un'altra tabella con inclusa la colonna row_num dove poter operare
+in quanto sulla CTE non si può operare con operazioni di UPDATE come DELETE, tabella che diventerà quella principale su cui lavorerò */
+
+CREATE TABLE Migrants_bckp_duplicate (
+LIKE migrants_bckp INCLUDING ALL);
+
+ALTER TABLE Migrants_bckp_duplicate
+ADD COLUMN row_num INT;
+
+INSERT INTO migrants_bckp_duplicate
+SELECT *,
+ROW_NUMBER() OVER(PARTITION BY "Incident Type", "Incident year", "Reported Month", "Region of Origin", "Region of Incident", "Country of Origin", 
+"Number of Dead", "Minimum Estimated Number of Missing", "Total Number of Dead and Missing", "Number of Survivors", "Number of Females", 
+"Number of Males", "Number of Children", "Cause of Death", "Migration route", "Location of death", "Information Source", "Coordinates", 
+"UNSD Geographical Grouping") AS row_num 
+FROM Migrants;
+
+-- Cancello tutte le righe con row_num > 1 ovvero i duplicati, in quanto con partition by solo le righe con tutte le colonne uguali hanno valore progressivo >1 --
+
+DELETE FROM migrants_bckp_duplicate
+WHERE row_num > 1;
+
+-- Elimino la colonna row_num perché non mi serve più 
+
+ALTER TABLE migrants_bckp_duplicate
+DROP COLUMN row_num;
+
+-- Controllo di eventuali numeri con due delimitatori per decine e migliaia che potrebbero creare problemi 
+
+UNION ALL
+
+SELECT 'Migration_route' AS column_name, "Migration_route" AS value
+FROM Migrants
+WHERE "Migration_route" ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Location_of_death' AS column_name, "Location_of_death" AS value
+FROM Migrants
+WHERE "Location_of_death" ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Information_Source' AS column_name, "Information_Source" AS value
+FROM Migrants
+WHERE "Information_Source" ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Coordinates' AS column_name, "Coordinates" AS value
+FROM Migrants
+WHERE "Coordinates" ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'unsd_geographical_grouping' AS column_name, "unsd_geographical_grouping" AS value
+FROM Migrants
+WHERE "unsd_geographical_grouping" ~ '\..*\..*';
+
+-- Modifica datatype con NULL al posto dei valori vuoti
+
+ALTER TABLE migrants
+    ALTER COLUMN incident_type TYPE VARCHAR(255) USING NULLIF(incident_type, '')::VARCHAR(255),
+    ALTER COLUMN incident_year TYPE INT USING NULLIF(incident_year, '')::INT,
+    ALTER COLUMN reported_month TYPE VARCHAR(50) USING NULLIF(reported_month, '')::VARCHAR(50),
+    ALTER COLUMN region_of_origin TYPE VARCHAR(255) USING NULLIF(region_of_origin, '')::VARCHAR(255),
+    ALTER COLUMN region_of_incident TYPE VARCHAR(255) USING NULLIF(region_of_incident, '')::VARCHAR(255),
+    ALTER COLUMN country_of_origin TYPE VARCHAR(255) USING NULLIF(country_of_origin, '')::VARCHAR(255),
+    ALTER COLUMN number_of_dead TYPE INT USING NULLIF(number_of_dead, '')::INT,
+    ALTER COLUMN minimum_estimated_number_of_missing TYPE INT USING NULLIF(minimum_estimated_number_of_missing, '')::INT,
+    ALTER COLUMN total_number_of_dead_and_missing TYPE INT USING NULLIF(total_number_of_dead_and_missing, '')::INT,
+    ALTER COLUMN number_of_survivors TYPE INT USING NULLIF(number_of_survivors, '')::INT,
+    ALTER COLUMN number_of_females TYPE INT USING NULLIF(number_of_females, '')::INT,
+    ALTER COLUMN number_of_males TYPE INT USING NULLIF(number_of_males, '')::INT,
+    ALTER COLUMN number_of_children TYPE INT USING NULLIF(number_of_children, '')::INT,
+    ALTER COLUMN cause_of_death TYPE VARCHAR(255) USING NULLIF(cause_of_death, '')::VARCHAR(255),
+    ALTER COLUMN migration_route TYPE VARCHAR(255) USING NULLIF(migration_route, '')::VARCHAR(255),
+    ALTER COLUMN location_of_death TYPE TEXT USING NULLIF(location_of_death, '')::TEXT,
+    ALTER COLUMN information_source TYPE TEXT USING NULLIF(information_source, '')::TEXT,
+    ALTER COLUMN coordinates TYPE VARCHAR(50) USING NULLIF(coordinates, '')::VARCHAR(50),
+    ALTER COLUMN unsd_geographical_grouping TYPE VARCHAR(255) USING NULLIF(unsd_geographical_grouping, '')::VARCHAR(255);
+
+
+
+-- Creazione tabella e tabella backup
+
+CREATE TABLE sustainable_energy_data (
+    Entity VARCHAR(255),
+    Year INT,
+    Access_to_electricity_percentage TEXT,
+    Access_to_clean_fuels_for_cooking TEXT,
+    Renewable_electricity_generating_capacity_per_capita TEXT,
+    Financial_flows_to_developing_countries_usd TEXT,
+    Renewable_energy_share_in_total_final_energy_consumption_percentage TEXT,
+    Electricity_from_fossil_fuels_TWh TEXT,
+    Electricity_from_nuclear_TWh TEXT,
+    Electricity_from_renewables_TWh TEXT,
+    Low_carbon_electricity_percentage TEXT,
+    Primary_energy_consumption_per_capita_kWh_person TEXT,
+    Energy_intensity_level_of_primary_energy_MJ_per_dollar TEXT,
+    Value_co2_emissions_kt_by_country TEXT,
+    Renewables_percentage_equivalent_primary_energy TEXT,
+    gdp_growth TEXT,
+    gdp_per_capita TEXT,
+    Density_P_Km2 VARCHAR(50),
+    Land_Area_Km2 TEXT,
+    Latitude TEXT,
+    Longitude TEXT
+);
+
+CREATE TABLE sustainable_energy_data_bckp
+AS TABLE sustainable_energy_data;
+
+SELECT * FROM sustainable_energy_data;
+
+/* -- Rimuovere eventuali duplicati con un comando row_number 
+per assegnare ad ogni riga il valore 1 che diventa progessivo 
+in caso di colonne uguali grazie al partition by su ognuna di esse */
+
+WITH cte_duplicati AS (
+SELECT *,
+ROW_NUMBER() OVER(PARTITION BY 
+		Entity, 
+        Year, 
+        Access_to_electricity_percentage, 
+        Access_to_clean_fuels_for_cooking, 
+        Renewable_electricity_generating_capacity_per_capita, 
+        Financial_flows_to_developing_countries_usd, 
+        Renewable_energy_share_in_total_final_energy_consumption_percentage, 
+        Electricity_from_fossil_fuels_TWh, 
+        Electricity_from_nuclear_TWh, 
+        Electricity_from_renewables_TWh, 
+        Low_carbon_electricity_percentage, 
+        Primary_energy_consumption_per_capita_kWh_person, 
+        Energy_intensity_level_of_primary_energy_MJ_per_dollar, 
+        Value_co2_emissions_kt_by_country, 
+        Renewables_percentage_equivalent_primary_energy, 
+        gdp_growth, 
+        gdp_per_capita, 
+        Density_P_Km2, 
+        Land_Area_Km2, 
+        Latitude, 
+        Longitude) AS row_num
+	FROM sustainable_energy_data
+)
+SELECT * FROM cte_duplicati
+WHERE row_num > 1;
+
+-- Controllo della presenza di virgole che potrebbero creare problemi
+
+SELECT *
+FROM sustainable_energy_data
+WHERE 
+    Access_to_electricity_percentage LIKE '%,%' OR
+    Access_to_clean_fuels_for_cooking LIKE '%,%' OR
+    Renewable_electricity_generating_capacity_per_capita LIKE '%,%' OR
+    Financial_flows_to_developing_countries_usd LIKE '%,%' OR
+    Renewable_energy_share_in_total_final_energy_consumption_percentage LIKE '%,%' OR
+    Electricity_from_fossil_fuels_TWh LIKE '%,%' OR
+    Electricity_from_nuclear_TWh LIKE '%,%' OR
+    Electricity_from_renewables_TWh LIKE '%,%' OR
+    Low_carbon_electricity_percentage LIKE '%,%' OR
+    Primary_energy_consumption_per_capita_kWh_person LIKE '%,%' OR
+    Energy_intensity_level_of_primary_energy_MJ_per_dollar LIKE '%,%' OR
+    Value_co2_emissions_kt_by_country LIKE '%,%' OR
+    Renewables_percentage_equivalent_primary_energy LIKE '%,%' OR
+    gdp_growth LIKE '%,%' OR
+    gdp_per_capita LIKE '%,%' OR
+    Density_P_Km2 LIKE '%,%' OR
+    Land_Area_Km2 LIKE '%,%' OR
+    Latitude LIKE '%,%' OR
+    Longitude LIKE '%,%';
+
+-- Controllo di numeri con due o più punti per evitare più di un separatore nei numeri
+
+SELECT 'Access_to_electricity_percentage' AS column_name, Access_to_electricity_percentage AS value
+FROM sustainable_energy_data
+WHERE Access_to_electricity_percentage ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Access_to_clean_fuels_for_cooking' AS column_name, Access_to_clean_fuels_for_cooking AS value
+FROM sustainable_energy_data
+WHERE Access_to_clean_fuels_for_cooking ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Renewable_electricity_generating_capacity_per_capita' AS column_name, Renewable_electricity_generating_capacity_per_capita AS value
+FROM sustainable_energy_data
+WHERE Renewable_electricity_generating_capacity_per_capita ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Financial_flows_to_developing_countries_usd' AS column_name, Financial_flows_to_developing_countries_usd AS value
+FROM sustainable_energy_data
+WHERE Financial_flows_to_developing_countries_usd ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Renewable_energy_share_in_total_final_energy_consumption_percentage' AS column_name, Renewable_energy_share_in_total_final_energy_consumption_percentage AS value
+FROM sustainable_energy_data
+WHERE Renewable_energy_share_in_total_final_energy_consumption_percentage ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Electricity_from_fossil_fuels_TWh' AS column_name, Electricity_from_fossil_fuels_TWh AS value
+FROM sustainable_energy_data
+WHERE Electricity_from_fossil_fuels_TWh ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Electricity_from_nuclear_TWh' AS column_name, Electricity_from_nuclear_TWh AS value
+FROM sustainable_energy_data
+WHERE Electricity_from_nuclear_TWh ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Electricity_from_renewables_TWh' AS column_name, Electricity_from_renewables_TWh AS value
+FROM sustainable_energy_data
+WHERE Electricity_from_renewables_TWh ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Low_carbon_electricity_percentage' AS column_name, Low_carbon_electricity_percentage AS value
+FROM sustainable_energy_data
+WHERE Low_carbon_electricity_percentage ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Primary_energy_consumption_per_capita_kWh_person' AS column_name, Primary_energy_consumption_per_capita_kWh_person AS value
+FROM sustainable_energy_data
+WHERE Primary_energy_consumption_per_capita_kWh_person ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Energy_intensity_level_of_primary_energy_MJ_per_dollar' AS column_name, Energy_intensity_level_of_primary_energy_MJ_per_dollar AS value
+FROM sustainable_energy_data
+WHERE Energy_intensity_level_of_primary_energy_MJ_per_dollar ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Value_co2_emissions_kt_by_country' AS column_name, Value_co2_emissions_kt_by_country AS value
+FROM sustainable_energy_data
+WHERE Value_co2_emissions_kt_by_country ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Renewables_percentage_equivalent_primary_energy' AS column_name, Renewables_percentage_equivalent_primary_energy AS value
+FROM sustainable_energy_data
+WHERE Renewables_percentage_equivalent_primary_energy ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'gdp_growth' AS column_name, gdp_growth AS value
+FROM sustainable_energy_data
+WHERE gdp_growth ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'gdp_per_capita' AS column_name, gdp_per_capita AS value
+FROM sustainable_energy_data
+WHERE gdp_per_capita ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Density_P_Km2' AS column_name, Density_P_Km2 AS value
+FROM sustainable_energy_data
+WHERE Density_P_Km2 ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Land_Area_Km2' AS column_name, Land_Area_Km2 AS value
+FROM sustainable_energy_data
+WHERE Land_Area_Km2 ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Latitude' AS column_name, Latitude AS value
+FROM sustainable_energy_data
+WHERE Latitude ~ '\..*\..*'
+
+UNION ALL
+
+SELECT 'Longitude' AS column_name, Longitude AS value
+FROM sustainable_energy_data
+WHERE Longitude ~ '\..*\..*';
+
+-- TRIM per togliere eventuali spazi bianchi all'inizio o alla fine 
+
+UPDATE sustainable_energy_data
+SET 
+    Access_to_electricity_percentage = TRIM(Access_to_electricity_percentage),
+    Access_to_clean_fuels_for_cooking = TRIM(Access_to_clean_fuels_for_cooking),
+    Renewable_electricity_generating_capacity_per_capita = TRIM(Renewable_electricity_generating_capacity_per_capita),
+    Financial_flows_to_developing_countries_usd = TRIM(Financial_flows_to_developing_countries_usd),
+    Renewable_energy_share_in_total_final_energy_consumption_percentage = TRIM(Renewable_energy_share_in_total_final_energy_consumption_percentage),
+    Electricity_from_fossil_fuels_TWh = TRIM(Electricity_from_fossil_fuels_TWh),
+    Electricity_from_nuclear_TWh = TRIM(Electricity_from_nuclear_TWh),
+    Electricity_from_renewables_TWh = TRIM(Electricity_from_renewables_TWh),
+    Low_carbon_electricity_percentage = TRIM(Low_carbon_electricity_percentage),
+    Primary_energy_consumption_per_capita_kWh_person = TRIM(Primary_energy_consumption_per_capita_kWh_person),
+    Energy_intensity_level_of_primary_energy_MJ_per_dollar = TRIM(Energy_intensity_level_of_primary_energy_MJ_per_dollar),
+    Value_co2_emissions_kt_by_country = TRIM(Value_co2_emissions_kt_by_country),
+    Renewables_percentage_equivalent_primary_energy = TRIM(Renewables_percentage_equivalent_primary_energy),
+    gdp_growth = TRIM(gdp_growth),
+    gdp_per_capita = TRIM(gdp_per_capita),
+    Density_P_Km2 = TRIM(Density_P_Km2),
+    Land_Area_Km2 = TRIM(Land_Area_Km2),
+    Latitude = TRIM(Latitude),
+    Longitude = TRIM(Longitude);
+
+-- Modifica Datatype Colonne e valori null a record vuoti
+
+ALTER TABLE sustainable_energy_data
+	ALTER COLUMN access_to_electricity_percentage TYPE FLOAT USING NULLIF(access_to_electricity_percentage,'')::FLOAT,
+	ALTER COLUMN access_to_clean_fuels_for_cooking TYPE FLOAT USING NULLIF(access_to_clean_fuels_for_cooking,'')::FLOAT,
+	ALTER COLUMN renewable_electricity_generating_capacity_per_capita TYPE FLOAT USING NULLIF(renewable_electricity_generating_capacity_per_capita,'')::FLOAT,
+	ALTER COLUMN financial_flows_to_developing_countries_usd TYPE BIGINT USING NULLIF(financial_flows_to_developing_countries_usd,'')::BIGINT,
+	ALTER COLUMN renewable_energy_share_in_total_final_energy_consumption_percen TYPE FLOAT USING NULLIF(renewable_energy_share_in_total_final_energy_consumption_percen,'')::FLOAT,
+	ALTER COLUMN electricity_from_fossil_fuels_twh TYPE FLOAT USING NULLIF(electricity_from_fossil_fuels_twh,'')::FLOAT,
+	ALTER COLUMN electricity_from_nuclear_twh TYPE FLOAT USING NULLIF(electricity_from_nuclear_twh,'')::FLOAT,
+	ALTER COLUMN electricity_from_renewables_twh TYPE FLOAT USING NULLIF(electricity_from_renewables_twh,'')::FLOAT,
+	ALTER COLUMN low_carbon_electricity_percentage TYPE FLOAT USING NULLIF(low_carbon_electricity_percentage,'')::FLOAT,
+	ALTER COLUMN primary_energy_consumption_per_capita_kwh_person TYPE FLOAT USING NULLIF(primary_energy_consumption_per_capita_kwh_person,'')::FLOAT,
+	ALTER COLUMN energy_intensity_level_of_primary_energy_mj_per_dollar TYPE FLOAT USING NULLIF(energy_intensity_level_of_primary_energy_mj_per_dollar,'')::FLOAT,
+	ALTER COLUMN value_co2_emissions_kt_by_country TYPE FLOAT USING NULLIF(value_co2_emissions_kt_by_country,'')::FLOAT,
+	ALTER COLUMN renewables_percentage_equivalent_primary_energy TYPE FLOAT USING NULLIF(renewables_percentage_equivalent_primary_energy,'')::FLOAT,
+	ALTER COLUMN gdp_growth TYPE FLOAT USING NULLIF(gdp_growth,'')::FLOAT,
+	ALTER COLUMN gdp_per_capita TYPE FLOAT USING NULLIF(gdp_per_capita,'')::FLOAT,
+	ALTER COLUMN density_p_km2 TYPE FLOAT USING NULLIF(density_p_km2,'')::FLOAT,
+	ALTER COLUMN land_area_km2 TYPE INT USING NULLIF(land_area_km2,'')::FLOAT,
+	ALTER COLUMN latitude TYPE FLOAT USING NULLIF(latitude,'')::FLOAT,
+	ALTER COLUMN longitude TYPE FLOAT USING NULLIF(longitude,'')::FLOAT;
+
+
+
+
+
+--Creazione tabella
+CREATE TABLE World_Data_2023 (
+    Country TEXT,
+    Density_P_Km2 TEXT, 
+    Abbreviation TEXT,
+    Agricultural_Land TEXT,
+    Land_Area_Km2 TEXT,
+    Armed_Forces_Size TEXT,
+    Birth_Rate TEXT,
+    Calling_Code TEXT,
+    Capital_or_Major_City TEXT,
+    CO2_Emissions TEXT,
+    CPI TEXT,
+    CPI_Change_Percent TEXT,
+    Currency_Code TEXT,
+    Fertility_Rate TEXT,
+    Forested_Area_Percent TEXT,
+    Gasoline_Price TEXT,
+    GDP TEXT,
+    Gross_Primary_Education_Enrollment TEXT,
+    Gross_Tertiary_Education_Enrollment TEXT,
+    Infant_mortality TEXT,
+    Largest_city TEXT,
+    Life_expectancy TEXT,
+    Maternal_mortality_ratio TEXT,
+    Minimum_wage TEXT,
+    Official_language TEXT,
+    Out_Of_Pocket_Health_Expenditure TEXT,
+    Physicians_Ter_Thousand TEXT,
+    Population TEXT,
+    Labor_Force_Participation TEXT,
+    Tax_revenue_percent TEXT,
+    Total_Tax_Rate TEXT,
+    Unemployment_Rate TEXT,
+    Urban_Population TEXT,
+    Latitude TEXT,
+    Longitude TEXT
+);
+
+-- Creazione Tabella1 di copia per lavorare
+CREATE TABLE World_Data_2023_Copy (
+LIKE World_Data_2023 INCLUDING ALL
+);
+
+INSERT INTO World_Data_2023_copy 
+SELECT * 
+FROM World_Data_2023;
+
+SELECT *
+FROM world_data_2023;
+
+
+/* -- Rimuovere eventuali duplicati con un comando row_number 
+per assegnare ad ogni riga il valore 1 che diventa progessivo 
+in caso di colonne uguali grazie al partition by su ognuna di esse */
+
+SELECT *,
+ROW_NUMBER() OVER(
+PARTITION BY Country, 
+        Density_P_Km2, 
+        Abbreviation, 
+        Agricultural_Land, 
+        Land_Area_Km2, 
+        Armed_Forces_Size, 
+        Birth_Rate, 
+        Calling_Code, 
+        Capital_or_Major_City, 
+        CO2_Emissions, 
+        CPI, 
+        CPI_Change_Percent, 
+        Currency_Code, 
+        Fertility_Rate, 
+        Forested_Area_Percent, 
+        Gasoline_Price, 
+        GDP, 
+        Gross_Primary_Education_Enrollment, 
+        Gross_Tertiary_Education_Enrollment, 
+        Infant_mortality, 
+        Largest_city, 
+        Life_expectancy, 
+        Maternal_mortality_ratio, 
+        Minimum_wage, 
+        Official_language, 
+        Out_Of_Pocket_Health_Expenditure, 
+        Physicians_Ter_Thousand, 
+        Population, 
+        Labor_Force_Participation, 
+        Tax_revenue_percent, 
+        Total_Tax_Rate, 
+        Unemployment_Rate, 
+        Urban_Population, 
+        Latitude, 
+        Longitude
+) AS row_num
+FROM world_data_2023;
+
+-- Modifica delimitatore numeri (da virgola a punto)
+
+UPDATE World_Data_2023
+SET 
+	density_p_km2 = REPLACE(density_p_km2, ',','.'),
+	land_area_km2 = REPLACE(land_area_km2, ',','.'),
+	cpi = REPLACE(cpi, ',','.'),
+	armed_forces_size = REPLACE(armed_forces_size, ',','.'),
+	co2_emissions = REPLACE(co2_emissions, ',','.'),
+	gdp = REPLACE(gdp, ',','.'),
+	population = REPLACE(population, ',','.'),
+	urban_population = REPLACE(urban_population, ',','.');
+
+WITH CTE_duplicati AS (
+SELECT *,
+ROW_NUMBER() OVER(
+PARTITION BY Country, 
+        Density_P_Km2, 
+        Abbreviation, 
+        Agricultural_Land, 
+        Land_Area_Km2, 
+        Armed_Forces_Size, 
+        Birth_Rate, 
+        Calling_Code, 
+        Capital_or_Major_City, 
+        CO2_Emissions, 
+        CPI, 
+        CPI_Change_Percent, 
+        Currency_Code, 
+        Fertility_Rate, 
+        Forested_Area_Percent, 
+        Gasoline_Price, 
+        GDP, 
+        Gross_Primary_Education_Enrollment, 
+        Gross_Tertiary_Education_Enrollment, 
+        Infant_mortality, 
+        Largest_city, 
+        Life_expectancy, 
+        Maternal_mortality_ratio, 
+        Minimum_wage, 
+        Official_language, 
+        Out_Of_Pocket_Health_Expenditure, 
+        Physicians_Ter_Thousand, 
+        Population, 
+        Labor_Force_Participation, 
+        Tax_revenue_percent, 
+        Total_Tax_Rate, 
+        Unemployment_Rate, 
+        Urban_Population, 
+        Latitude, 
+        Longitude) AS row_num
+FROM world_data_2023
+)
+
+SELECT * FROM CTE_duplicati
+WHERE row_num > 1;
+
+-- Modificare il separatore dei numeri da virgola a punto ed eliminare i punti se sono più di uno e possono creare problemi 
+
+UPDATE World_Data_2023
+SET 
+    Density_P_Km2 = REPLACE(Density_P_Km2, ',', '.'),
+    Agricultural_Land = REPLACE(Agricultural_Land, ',', '.'),
+    Land_Area_Km2 = REPLACE(Land_Area_Km2, ',', '.'),
+    Armed_Forces_Size = REPLACE(Armed_Forces_Size, ',', '.'),
+    Birth_Rate = REPLACE(Birth_Rate, ',', '.'),
+    CO2_Emissions = REPLACE(CO2_Emissions, ',', '.'),
+    CPI = REPLACE(CPI, ',', '.'),
+    CPI_Change_Percent = REPLACE(CPI_Change_Percent, ',', '.'),
+    Fertility_Rate = REPLACE(Fertility_Rate, ',', '.'),
+    Forested_Area_Percent = REPLACE(Forested_Area_Percent, ',', '.'),
+    Gasoline_Price = REPLACE(Gasoline_Price, ',', '.'),
+    GDP = REPLACE(GDP, ',', '.'),
+    Gross_Primary_Education_Enrollment = REPLACE(Gross_Primary_Education_Enrollment, ',', '.'),
+    Gross_Tertiary_Education_Enrollment = REPLACE(Gross_Tertiary_Education_Enrollment, ',', '.'),
+    Infant_mortality = REPLACE(Infant_mortality, ',', '.'),
+	Life_Expectancy = REPLACE(Life_Expectancy, ',', '.'),
+    Maternal_mortality_ratio = REPLACE(Maternal_mortality_ratio, ',', '.'),
+    Minimum_wage = REPLACE(Minimum_wage, ',', '.'),
+    Out_Of_Pocket_Health_Expenditure = REPLACE(Out_Of_Pocket_Health_Expenditure, ',', '.'),
+    Physicians_Ter_Thousand = REPLACE(Physicians_Ter_Thousand, ',', '.'),
+    Population = REPLACE(Population, ',', '.'),
+    Labor_Force_Participation = REPLACE(Labor_Force_Participation, ',', '.'),
+    Tax_revenue_percent = REPLACE(Tax_revenue_percent, ',', '.'),
+    Total_Tax_Rate = REPLACE(Total_Tax_Rate, ',', '.'),
+    Unemployment_Rate = REPLACE(Unemployment_Rate, ',', '.'),
+    Urban_Population = REPLACE(Urban_Population, ',', '.'),
+    Latitude = REPLACE(Latitude, ',', '.'),
+    Longitude = REPLACE(Longitude, ',', '.');
+
+UPDATE World_Data_2023
+SET 
+	land_area_km2 = REPLACE(land_area_km2, '.', ''),
+ 	armed_forces_size = REPLACE(armed_forces_size, '.', ''),
+	co2_emissions = REPLACE(co2_emissions, '.', ''),
+ 	gdp = REPLACE(gdp, '.', ''),
+	population = REPLACE(population, '.', ''),
+	urban_population = REPLACE(urban_population, '.', '');
+
+-- Eliminazione del primo punto nei numeri con il secondo che funge da separatore decimale
+
+UPDATE World_Data_2023
+SET cpi = REGEXP_REPLACE(cpi, '\.(?=.*\.)', '')
+WHERE cpi LIKE '%.%.%';
+	
+-- Modificare valori speciali non visibili o che potrebbero creare problemi
+
+UPDATE World_Data_2023
+SET 
+    Country = CASE
+        WHEN Country = 'S�����������' THEN 'São Tomé e Príncipe'
+        ELSE Country
+    END,
+    
+    Capital_or_Major_City = CASE
+        WHEN Capital_or_Major_City = 'Bras���' THEN 'Brasilia'
+		WHEN Capital_or_Major_City = 'Yaound�' THEN 'Yaoundé'
+		WHEN Capital_or_Major_City = 'Bogot�' THEN 'Bogotà'
+		WHEN Capital_or_Major_City = 'San Jos������' THEN 'San José'
+		WHEN Capital_or_Major_City = 'Reykjav��' THEN 'Reykjavík'
+		WHEN Capital_or_Major_City = 'Mal�' THEN 'Malé'
+		WHEN Capital_or_Major_City = 'Chi����' THEN 'Chișinău'
+		WHEN Capital_or_Major_City = 'Asunci��' THEN 'Asunción'
+		WHEN Capital_or_Major_City = 'S����' THEN 'San Josè'
+		WHEN Capital_or_Major_City = 'Lom�' THEN 'Lomé'
+		WHEN Capital_or_Major_City = 'Nuku����' THEN 'Nukuʻalofa'
+    	ELSE Capital_or_Major_City
+    END,
+
+	Largest_city = CASE
+		WHEN Largest_city = 'S����' THEN 'São Paulo'
+		WHEN Largest_city = 'Bogot�' THEN 'Bogotà'
+		WHEN Largest_city = 'Statos�������' THEN 'Nicosia'
+		WHEN Largest_city = 'San Jos������' THEN 'San José'
+		WHEN Largest_city = 'Reykjav��' THEN 'Reykjavík'
+		WHEN Largest_city = 'Mal�' THEN 'Malé'
+		WHEN Largest_city = 'Chi����' THEN 'Chișinău'
+		WHEN Largest_city = 'S����' THEN 'São Tomé'
+		WHEN Largest_city = 'S�����' THEN 'Stokholm'
+		WHEN Largest_city = 'Z���' THEN 'Zurigo'
+		WHEN Largest_city = 'Lom�' THEN 'Lomé'
+		WHEN Largest_city = 'Nuku����' THEN 'Nukuʻalofa'
+		ELSE Largest_city
+	END;
+
+UPDATE World_Data_2023
+
+SET 
+	Gasoline_price = REPLACE(Gasoline_price, '$',''),
+	GDP = REPLACE(GDP, '$',''),
+	Minimum_wage = REPLACE(Minimum_wage, '$','');
+
+-- TRIM per togliere eventuali spazi bianchi all'inizio o alla fine
+
+UPDATE World_Data_2023
+SET 
+    Country = TRIM(Country),
+    Density_P_Km2 = TRIM(Density_P_Km2),
+    Abbreviation = TRIM(Abbreviation),
+    Agricultural_Land = TRIM(Agricultural_Land),
+    Land_Area_Km2 = TRIM(Land_Area_Km2),
+    Armed_Forces_Size = TRIM(Armed_Forces_Size),
+    Birth_Rate = TRIM(Birth_Rate),
+    Calling_Code = TRIM(Calling_Code),
+    Capital_or_Major_City = TRIM(Capital_or_Major_City),
+    CO2_Emissions = TRIM(CO2_Emissions),
+    CPI = TRIM(CPI),
+    CPI_Change_Percent = TRIM(CPI_Change_Percent),
+    Currency_Code = TRIM(Currency_Code),
+    Fertility_Rate = TRIM(Fertility_Rate),
+    Forested_Area_Percent = TRIM(Forested_Area_Percent),
+    Gasoline_Price = TRIM(Gasoline_Price),
+    GDP = TRIM(GDP),
+    Gross_Primary_Education_Enrollment = TRIM(Gross_Primary_Education_Enrollment),
+    Gross_Tertiary_Education_Enrollment = TRIM(Gross_Tertiary_Education_Enrollment),
+    Infant_mortality = TRIM(Infant_mortality),
+    Largest_city = TRIM(Largest_city),
+    Life_expectancy = TRIM(Life_expectancy),
+    Maternal_mortality_ratio = TRIM(Maternal_mortality_ratio),
+    Minimum_wage = TRIM(Minimum_wage),
+    Official_language = TRIM(Official_language),
+    Out_Of_Pocket_Health_Expenditure = TRIM(Out_Of_Pocket_Health_Expenditure),
+    Physicians_Ter_Thousand = TRIM(Physicians_Ter_Thousand),
+    Population = TRIM(Population),
+    Labor_Force_Participation = TRIM(Labor_Force_Participation),
+    Tax_revenue_percent = TRIM(Tax_revenue_percent),
+    Total_Tax_Rate = TRIM(Total_Tax_Rate),
+    Unemployment_Rate = TRIM(Unemployment_Rate),
+    Urban_Population = TRIM(Urban_Population),
+    Latitude = TRIM(Latitude),
+    Longitude = TRIM(Longitude);
+
+ /* -- Modifica tipo dati da TEXT al 
+ tipo che reputo più consono. Uso di NULLIF al posto dei valori bianchi per evitare problemi nella conversione 
+ in NUMERIC o INT*/
+
+ALTER TABLE World_Data_2023
+	ALTER COLUMN Country TYPE VARCHAR(50) USING NULLIF(country,'')::VARCHAR(50),
+	ALTER COLUMN density_p_km2 TYPE NUMERIC USING NULLIF(density_p_km2,'')::NUMERIC,
+	ALTER COLUMN abbreviation TYPE VARCHAR(10) USING NULLIF(abbreviation, '')::VARCHAR(10),
+	ALTER COLUMN agricultural_land TYPE NUMERIC USING NULLIF(agricultural_land,'')::NUMERIC,
+	ALTER COLUMN land_area_km2 TYPE VARCHAR(255) USING NULLIF(land_area_km2,'')::VARCHAR(255),
+	ALTER COLUMN armed_forces_size TYPE VARCHAR(255) USING NULLIF(armed_forces_size,'')::VARCHAR(255),
+	ALTER COLUMN birth_rate TYPE NUMERIC USING NULLIF(birth_rate,'')::NUMERIC,
+	ALTER COLUMN calling_code TYPE INT USING calling_code::INT,
+	ALTER COLUMN capital_or_major_city TYPE VARCHAR(100) USING NULLIF(capital_or_major_city,'')::VARCHAR(100),
+	ALTER COLUMN co2_emissions TYPE VARCHAR(50) USING NULLIF(co2_emissions,'')::VARCHAR(50),
+	ALTER COLUMN cpi TYPE VARCHAR(20) USING NULLIF(cpi,'')::VARCHAR(20),
+	ALTER COLUMN cpi_change_percent TYPE NUMERIC USING NULLIF(cpi_change_percent,'')::NUMERIC,
+	ALTER COLUMN currency_code TYPE VARCHAR(10) USING NULLIF(currency_code,'')::VARCHAR(10),
+	ALTER COLUMN fertility_rate TYPE NUMERIC USING NULLIF(fertility_rate,'')::NUMERIC,
+	ALTER COLUMN forested_area_percent TYPE NUMERIC USING NULLIF(forested_area_percent,'')::NUMERIC,
+	ALTER COLUMN gasoline_price TYPE NUMERIC USING NULLIF(gasoline_price,'')::NUMERIC,
+	ALTER COLUMN gdp TYPE VARCHAR(30) USING NULLIF(gdp,'')::VARCHAR(30),
+	ALTER COLUMN gross_primary_education_enrollment TYPE NUMERIC USING NULLIF(gross_primary_education_enrollment,'')::NUMERIC,
+	ALTER COLUMN gross_tertiary_education_enrollment TYPE NUMERIC USING NULLIF(gross_tertiary_education_enrollment,'')::NUMERIC,
+	ALTER COLUMN infant_mortality TYPE NUMERIC USING NULLIF(infant_mortality,'')::NUMERIC,
+	ALTER COLUMN largest_city TYPE VARCHAR(50) USING NULLIF(infant_mortality,'')::VARCHAR(50),
+	ALTER COLUMN life_expectancy TYPE NUMERIC USING NULLIF(life_expectancy,'')::NUMERIC,
+	ALTER COLUMN maternal_mortality_ratio TYPE INT USING NULLIF(maternal_mortality_ratio,'')::INT,
+	ALTER COLUMN minimum_wage TYPE NUMERIC USING NULLIF(minimum_wage,'')::NUMERIC,
+	ALTER COLUMN official_language TYPE VARCHAR(50) USING NULLIF(official_language,'')::VARCHAR(50),
+	ALTER COLUMN out_of_pocket_health_expenditure TYPE NUMERIC USING NULLIF(out_of_pocket_health_expenditure,'')::NUMERIC,
+	ALTER COLUMN physicians_ter_thousand TYPE NUMERIC USING NULLIF(physicians_ter_thousand,'')::NUMERIC,
+	ALTER COLUMN population TYPE VARCHAR(30) USING NULLIF(population,'')::VARCHAR(30),
+	ALTER COLUMN labor_force_participation TYPE NUMERIC USING NULLIF(labor_force_participation,'')::NUMERIC,
+	ALTER COLUMN tax_revenue_percent TYPE NUMERIC USING NULLIF(tax_revenue_percent,'')::NUMERIC,
+	ALTER COLUMN total_tax_rate TYPE NUMERIC USING NULLIF(total_tax_rate,'')::NUMERIC,
+	ALTER COLUMN unemployment_rate TYPE NUMERIC USING NULLIF(unemployment_rate,'')::NUMERIC,
+	ALTER COLUMN urban_population TYPE VARCHAR(20) USING NULLIF(urban_population,'')::VARCHAR(20),
+	ALTER COLUMN latitude TYPE NUMERIC USING NULLIF(latitude,'')::NUMERIC,
+	ALTER COLUMN longitude TYPE NUMERIC USING NULLIF(longitude,'')::NUMERIC;
+
+ALTER TABLE World_Data_2023
+ALTER COLUMN land_area_km2 TYPE NUMERIC USING land_area_km2::NUMERIC,
+ALTER COLUMN armed_forces_size TYPE NUMERIC USING armed_forces_size::NUMERIC,
+ALTER COLUMN co2_emissions TYPE NUMERIC USING co2_emissions::NUMERIC,
+ALTER COLUMN cpi TYPE NUMERIC USING NULLIF(cpi, '')::NUMERIC,
+ALTER COLUMN gdp TYPE BIGINT USING NULLIF(gdp, '')::BIGINT,
+ALTER COLUMN population TYPE BIGINT USING NULLIF(population, '')::BIGINT,
+ALTER COLUMN urban_population TYPE BIGINT USING NULLIF(urban_population, '')::BIGINT;
+
