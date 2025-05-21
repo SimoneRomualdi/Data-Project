@@ -1,6 +1,6 @@
-#Lo scopo dell'eseguibile è spostare un singolo file (che si trova nella cartella files) nella sottocartella di competenza, aggiornando il recap. 
+#/Lo scopo dell'eseguibile è spostare un singolo file (che si trova nella cartella files) nella sottocartella di competenza, aggiornando il recap. 
 L'interfaccia dell'eseguibile ha come unico argomento (obbligatorio) il nome del file da spostare (comprensivo di formato, es: 'trump.jpeg'). 
-Nel caso in cui il file passato come argomento non esista, l'interfaccia deve comunicarlo all'utente.#
+Nel caso in cui il file passato come argomento non esista, l'interfaccia deve comunicarlo all'utente./#
 
 
 import os
